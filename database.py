@@ -21,3 +21,17 @@ def get_req_channel():
 # പുതിയ ഉപയോക്താക്കളെ ഡാറ്റാബേസിൽ ചേർക്കാൻ
 def add_user(user_id):
     users_collection.update_one({'_id': user_id}, {'$set': {'_id': user_id}}, upsert=True)
+
+
+# 📊 ഡാറ്റാബേസിന്റെ സൈസ് മെഗാബൈറ്റിൽ (MB) കണക്കാക്കുന്ന ഫങ്ക്ഷൻ
+def get_db_size():
+    try:
+        # db.command("dbstats") വഴി ഡാറ്റാബേസ് വിവരങ്ങൾ എടുക്കുന്നു
+        stats = db.command("dbstats")
+        # bytes-ൽ ലഭിക്കുന്ന സൈസിനെ MB-യിലേക്ക് മാറ്റുന്നു (1024 * 1024)
+        data_size_mb = stats.get('dataSize', 0) / (1024 * 1024)
+        return round(data_size_mb, 2)
+    except Exception as e:
+        print(f"Error getting DB stats: {e}")
+        return 0.0
+
