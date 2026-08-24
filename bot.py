@@ -1,8 +1,7 @@
 import logging
 import threading
 from flask import Flask
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ChatJoinRequestHandler
-
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ChatJoinRequestHandler, CallbackQueryHandler # 👈 'CallbackQueryHandler' കൂടി ഇവിടെ ചേർക്കുക
 # info.py ഫയലിൽ നിന്നും BOT_TOKEN കൃത്യമായി ഇമ്പോർട്ട് ചെയ്യുന്നു
 from info import BOT_TOKEN
 import handlers
@@ -26,16 +25,19 @@ def main():
         print("Error: BOT_TOKEN സെറ്റ് ചെയ്തിട്ടില്ല!")
         return
 
-    # ഫ്ലാസ്ക് സെർവർ മറ്റൊരു ത്രെഡിൽ റൺ ചെയ്യിക്കുന്നു
     threading.Thread(target=run_flask, daemon=True).start()
 
-    # ബോട്ട് ആപ്ലിക്കേഷൻ സ്റ്റാർട്ട് ചെയ്യുന്നു
     app = Application.builder().token(BOT_TOKEN).build()
 
-    # ഹാൻഡ്‌ലറുകൾ കണക്ട് ചെയ്യുന്നു
+    # കമാൻഡുകൾ
     app.add_handler(CommandHandler("start", handlers.start_command))
     app.add_handler(CommandHandler("setchannel", handlers.set_channel_command))
     app.add_handler(CommandHandler("broadcast", handlers.broadcast_command))
+    app.add_handler(CommandHandler("stats", handlers.stats_command))
+    
+    # 🔄 പുതിയ റിഫ്രഷ് ബട്ടൺ പ്രവർത്തിക്കാൻ ഈ വരി താഴെ ആഡ് ചെയ്യുക
+    app.add_handler(CallbackQueryHandler(handlers.stats_callback_handler, pattern="^refresh_stats$"))
+    
     app.add_handler(ChatJoinRequestHandler(handlers.handle_join_request))
     
     forward_filters = filters.FORWARDED & (filters.Document.ALL | filters.PHOTO | filters.VIDEO | filters.AUDIO)
