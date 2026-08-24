@@ -1,14 +1,15 @@
 import base64
+import asyncio
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from telegram.error import TelegramError
 
 from info import OWNER_ID
-from database import batch_collection, requests_collection, settings_collection, get_req_channel
+from database import batch_collection, requests_collection, settings_collection, users_collection, get_req_channel, add_user
 
 user_data_store = {}
 
-# Join Request വരുന്നത് ട്രാക്ക് ചെയ്യാൻ
+# Join Request ട്രാക്ക് ചെയ്യാൻ
 async def handle_join_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
     request = update.chat_join_request
     user_id = request.from_user.id
@@ -41,10 +42,11 @@ async def has_requested_or_joined(context: ContextTypes.DEFAULT_TYPE, user_id: i
 # /start കമാൻഡ്
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
+    add_user(user_id)  # യൂസറെ ഡാറ്റാബേസിൽ സേവ് ചെയ്യുന്നു
     current_channel = get_req_channel()
     
     if context.args:
-        batch_id = context.args[0]
+        batch_id = context.args
         
         allowed = await has_requested_or_joined(context, user_id)
         if not allowed:
@@ -74,21 +76,27 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             start_id = batch_data['start_id']
             end_id = batch_data['end_id']
             
-            await update.message.reply_text("📦 താങ്കൾ തിരഞ്ഞ ഫയലുകൾ താഴെ നൽകുന്നു...")
+            # 💡 ഫീച്ചർ 1: Welcome Message / Ads (ഫയലുകൾക്ക് തൊട്ടുമുമ്പ് കാണിക്കുന്നത്)
+            await update.message.reply_text(
+                "✨ **താങ്കൾ തിരഞ്ഞ ഫയലുകൾ താഴെ നൽകുന്നു!**\n\n"
+                "📢 ഒപ്പമുള്ള ചാനലുകൾ സബ്‌സ്‌ക്രൈബ് ചെയ്യാൻ മറക്കരുത്. കൂടുതൽ ഫയലുകൾക്കായി ഞങ്ങളോടൊപ്പം തുടരുക! 👇"
+            )
             
             for msg_id in range(start_id, end_id + 1):
                 try:
+                    # 💡 ഫീച്ചർ 2: File Protect (`protect_content=True` ഫയൽ സേവ് ചെയ്യാനോ ഫോർവേഡ് ചെയ്യാനോ പറ്റില്ല)
                     await context.bot.copy_message(
                         chat_id=update.message.chat_id,
                         from_chat_id=from_chat,
-                        message_id=msg_id
+                        message_id=msg_id,
+                        protect_content=True
                     )
                 except:
                     continue
         else:
             await update.message.reply_text("❌ തെറ്റായ ലിങ്ക് അല്ലെങ്കിൽ ഈ ബാച്ച് നിലവിലില്ല!")
     else:
-        await update.message.reply_text("ഹലോ! ഞാൻ ഒരു Force Join ഫീച്ചറുള്ള Batch File Share Bot ആണ്. 📂")
+        await update.message.reply_text("ഹലോ! ഞാൻ ഒരു അഡ്വാൻസ്ഡ് Force Join ഫീച്ചറുള്ള Batch File Share Bot ആണ്. 📂")
 
 # /setchannel കമാൻഡ്
 async def set_channel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -101,7 +109,7 @@ async def set_channel_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         return
 
     try:
-        new_channel_id = int(context.args[0])
+        new_channel_id = int(context.args)
         try:
             await context.bot.get_chat(new_channel_id)
         except TelegramError:
@@ -112,6 +120,44 @@ async def set_channel_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         await update.message.reply_text(f"✅ **റിക്വസ്റ്റ് ചാനൽ മാറ്റിയിരിക്കുന്നു!**\n🆔 ID: `{new_channel_id}`", parse_mode="Markdown")
     except ValueError:
         await update.message.reply_text("❌ തെറ്റായ ഐഡി ഫോർമാറ്റ്!")
+
+# 💡 ഫീച്ചർ 3: Broadcasting കമാൻഡ് (Owner Only)
+# ഉപയോഗിക്കേണ്ട രീതി: ഒരു മെസ്സേജിന് മറുപടിയായി (Reply) /broadcast എന്ന് ടൈപ്പ് ചെയ്യുക
+async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.message.from_user.id
+    if user_id != OWNER_ID:
+        return
+
+    if not update.message.reply_to_message:
+        await update.message.reply_text("⚠️ **ഉപയോഗിക്കേണ്ട രീതി:** ഏതെങ്കിലും ഒരു മെസ്സേജിന് മറുപടിയായി (Reply) `/broadcast` എന്ന് ടൈപ്പ് ചെയ്യുക.")
+        return
+
+    broadcast_msg = update.message.reply_to_message
+    all_users = users_collection.find()
+    
+    await update.message.reply_text("📢 ബ്രോഡ്കാസ്റ്റിംഗ് ആരംഭിച്ചിരിക്കുന്നു...")
+    
+    success = 0
+    failed = 0
+    
+    for user in all_users:
+        try:
+            await context.bot.copy_message(
+                chat_id=user['_id'],
+                from_chat_id=update.message.chat_id,
+                message_id=broadcast_msg.message_id
+            )
+            success += 1
+            await asyncio.sleep(0.05) # ടെലിഗ്രാം ഫ്ലഡ് തടയാൻ ചെറിയൊരു ഇടവേള
+        except:
+            failed += 1
+            continue
+
+    await update.message.reply_text(
+        f"✅ **ബ്രോഡ്കാസ്റ്റിംഗ് പൂർത്തിയായി!**\n\n"
+        f"👤 വിജയം: {success}\n"
+        f"❌ പരാജയം (Blocked Users): {failed}"
+    )
 
 # ഫയലുകൾ ഫോർവേഡ് ചെയ്യുന്നത് നിയന്ത്രിക്കാൻ
 async def handle_forwarded_files(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -158,4 +204,3 @@ async def handle_forwarded_files(update: Update, context: ContextTypes.DEFAULT_T
         
         await update.message.reply_text(f"✅ **Batch നിർമ്മിച്ചിരിക്കുന്നു!**\n🔗 **Batch ലിങ്ക്:** {batch_link}", parse_mode="Markdown")
         del user_data_store[user_id]
-
