@@ -214,3 +214,44 @@ async def handle_forwarded_files(update: Update, context: ContextTypes.DEFAULT_T
         await update.message.reply_text(f"✅ **Batch നിർമ്മിച്ചിരിക്കുന്നു!**\n🔗 **Batch ലിങ്ക്:** {batch_link}", parse_mode="Markdown")
         del user_data_store[user_id]
 
+
+
+
+# 📊 സ്റ്റാറ്റിസ്റ്റിക്സും ഡാറ്റാബേസ് സ്പേസും അറിയാനുള്ള പുതുക്കിയ കമാൻഡ് (Owner Only)
+from database import get_db_size  # 👈 ഈ വരി handlers.py-ൽ മുകളിലായി ഉണ്ടെന്ന് ഉറപ്പാക്കുക
+
+async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.message.from_user.id
+    
+    if user_id != OWNER_ID:
+        return
+
+    await update.message.reply_text("📊 വിവരങ്ങൾ ശേഖരിക്കുന്നു, ദയവായി കാത്തിരിക്കൂ...")
+
+    try:
+        total_users = users_collection.count_documents({})
+        total_batches = batch_collection.count_documents({})
+        total_requests = requests_collection.count_documents({})
+        current_channel = get_req_channel()
+
+        # 💾 ഡാറ്റാബേസ് സ്പേസ് കണക്കുകൂട്ടലുകൾ
+        used_space = get_db_size()  # നിലവിൽ ഉപയോഗിച്ച സൈസ് (MB)
+        total_free_limit = 512.00  # MongoDB ഫ്രീ പ്ലാൻ ലിമിറ്റ് (512 MB)
+        remaining_space = max(0.0, total_free_limit - used_space)  # ബാക്കിയുള്ള സ്പേസ്
+        used_percentage = round((used_space / total_free_limit) * 100, 2) # ഉപയോഗിച്ച ശതമാനം
+
+        channel_text = f"`{current_channel}`" if current_channel else "സെറ്റ് ചെയ്തിട്ടില്ല ❌"
+
+        await update.message.reply_text(
+            f"📊 **ബോട്ട് സ്റ്റാറ്റിസ്റ്റിക്സ് (Bot Stats)**\n\n"
+            f"👤 **ആകെ ഉപയോക്താക്കൾ:** {total_users}\n"
+            f"📦 **ആകെ ബാച്ച് ലിങ്കുകൾ:** {total_batches}\n"
+            f"📩 **നിലവിലുള്ള ജോയിൻ റിക്വസ്റ്റുകൾ:** {total_requests}\n\n"
+            f"💾 **ഡാറ്റാബേസ് വിവരങ്ങൾ (MongoDB):**\n"
+            f" └ 📉 ഉപയോഗിച്ചത്: `{used_space} MB` ({used_percentage}%)\n"
+            f" └ 📈 ബാക്കിയുള്ളത്: `{remaining_space} MB` / `512 MB`\n\n"
+            f"📢 **നിലവിലെ റിക്വസ്റ്റ് ചാനൽ ഐഡി:** {channel_text}",
+            parse_mode="Markdown"
+        )
+    except Exception as e:
+        await update.message.reply_text(f"❌ സ്റ്റാറ്റ്സ് എടുക്കുന്നതിൽ പരാജയപ്പെട്ടു: {e}")
