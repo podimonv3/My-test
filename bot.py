@@ -1,7 +1,15 @@
+import logging
 import threading
 from flask import Flask
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ChatJoinRequestHandler
 
-# Koyeb-ന് കാണിച്ചു കൊടുക്കാൻ വേണ്ടിയുള്ള ഒരു ചെറിയ വെബ് പേജ്
+# info.py ഫയലിൽ നിന്നും BOT_TOKEN കൃത്യമായി ഇമ്പോർട്ട് ചെയ്യുന്നു
+from info import BOT_TOKEN
+import handlers
+
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+
+# Koyeb-ന് കാണിച്ചു കൊടുക്കാൻ വേണ്ടിയുള്ള ഒരു ചെറിയ വെബ് പേജ് (Keep Alive)
 flask_app = Flask(__name__)
 
 @flask_app.route('/')
@@ -10,7 +18,6 @@ def home():
 
 def run_flask():
     import os
-    # Koyeb തനിയെ നൽകുന്ന പോർട്ട് നമ്പർ എടുക്കുന്നു
     port = int(os.getenv("PORT", 8080))
     flask_app.run(host='0.0.0.0', port=port)
 
@@ -19,11 +26,13 @@ def main():
         print("Error: BOT_TOKEN സെറ്റ് ചെയ്തിട്ടില്ല!")
         return
 
-    # 💡 ഫ്ലാസ്ക് സെർവർ മറ്റൊരു ത്രെഡിൽ റൺ ചെയ്യിക്കുന്നു (Keep Alive Trick)
+    # ഫ്ലാസ്ക് സെർവർ മറ്റൊരു ത്രെഡിൽ റൺ ചെയ്യിക്കുന്നു
     threading.Thread(target=run_flask, daemon=True).start()
 
-    # നിങ്ങളുടെ പഴയ ബോട്ട് സെറ്റപ്പ് താഴെ തുടരുന്നു
+    # ബോട്ട് ആപ്ലിക്കേഷൻ സ്റ്റാർട്ട് ചെയ്യുന്നു
     app = Application.builder().token(BOT_TOKEN).build()
+
+    # ഹാൻഡ്‌ലറുകൾ കണക്ട് ചെയ്യുന്നു
     app.add_handler(CommandHandler("start", handlers.start_command))
     app.add_handler(CommandHandler("setchannel", handlers.set_channel_command))
     app.add_handler(CommandHandler("broadcast", handlers.broadcast_command))
