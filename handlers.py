@@ -9,7 +9,7 @@ from database import batch_collection, requests_collection, settings_collection,
 
 user_data_store = {}
 
-# Join Request ട്രാക്ക് ചെയ്യാൻ
+# Join Request വരുന്നത് ട്രാക്ക് ചെയ്യാൻ
 async def handle_join_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
     request = update.chat_join_request
     user_id = request.from_user.id
@@ -42,7 +42,7 @@ async def has_requested_or_joined(context: ContextTypes.DEFAULT_TYPE, user_id: i
 # /start കമാൻഡ്
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
-    add_user(user_id)  # യൂസറെ ഡാറ്റാബേസിൽ സേവ് ചെയ്യുന്നു
+    add_user(user_id)
     current_channel = get_req_channel()
     
     if context.args:
@@ -76,15 +76,17 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             start_id = batch_data['start_id']
             end_id = batch_data['end_id']
             
-            # 💡 ഫീച്ചർ 1: Welcome Message / Ads (ഫയലുകൾക്ക് തൊട്ടുമുമ്പ് കാണിക്കുന്നത്)
+            # Welcome Message / Ads 
             await update.message.reply_text(
                 "✨ **താങ്കൾ തിരഞ്ഞ ഫയലുകൾ താഴെ നൽകുന്നു!**\n\n"
-                "📢 ഒപ്പമുള്ള ചാനലുകൾ സബ്‌സ്‌ക്രൈബ് ചെയ്യാൻ മറക്കരുത്. കൂടുതൽ ഫയലുകൾക്കായി ഞങ്ങളോടൊപ്പം തുടരുക! 👇"
+                "📢 കൂടുതൽ ഫയലുകൾക്കായി ഞങ്ങളോടൊപ്പം തുടരുക! 👇"
             )
             
             for msg_id in range(start_id, end_id + 1):
                 try:
-                    # 💡 ഫീച്ചർ 2: File Protect (`protect_content=True` ഫയൽ സേവ് ചെയ്യാനോ ഫോർവേഡ് ചെയ്യാനോ പറ്റില്ല)
+                    # 🔥 ഇവിടുത്തെ മാറ്റം ശ്രദ്ധിക്കുക:
+                    # 1. copy_message ഉപയോഗിച്ചതിനാൽ ചാനൽ പേര് (Forward Tag) കാണില്ല.
+                    # 2. protect_content=True നൽകിയതിനാൽ ഫയൽ ഫോർവേഡ് ചെയ്യാനോ സേവ് ചെയ്യാനോ സാധിക്കില്ല.
                     await context.bot.copy_message(
                         chat_id=update.message.chat_id,
                         from_chat_id=from_chat,
@@ -121,8 +123,7 @@ async def set_channel_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     except ValueError:
         await update.message.reply_text("❌ തെറ്റായ ഐഡി ഫോർമാറ്റ്!")
 
-# 💡 ഫീച്ചർ 3: Broadcasting കമാൻഡ് (Owner Only)
-# ഉപയോഗിക്കേണ്ട രീതി: ഒരു മെസ്സേജിന് മറുപടിയായി (Reply) /broadcast എന്ന് ടൈപ്പ് ചെയ്യുക
+# Broadcasting കമാൻഡ് (Owner Only)
 async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     if user_id != OWNER_ID:
@@ -148,15 +149,13 @@ async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 message_id=broadcast_msg.message_id
             )
             success += 1
-            await asyncio.sleep(0.05) # ടെലിഗ്രാം ഫ്ലഡ് തടയാൻ ചെറിയൊരു ഇടവേള
+            await asyncio.sleep(0.05)
         except:
             failed += 1
             continue
 
     await update.message.reply_text(
-        f"✅ **ബ്രോഡ്കാസ്റ്റിംഗ് പൂർത്തിയായി!**\n\n"
-        f"👤 വിജയം: {success}\n"
-        f"❌ പരാജയം (Blocked Users): {failed}"
+        f"✅ **ബ്രോഡ്കാസ്റ്റിംഗ് പൂർത്തിയായി!**\n\n👤 വിജയം: {success}\n❌ പരാജയം (Blocked Users): {failed}"
     )
 
 # ഫയലുകൾ ഫോർവേഡ് ചെയ്യുന്നത് നിയന്ത്രിക്കാൻ
@@ -204,3 +203,4 @@ async def handle_forwarded_files(update: Update, context: ContextTypes.DEFAULT_T
         
         await update.message.reply_text(f"✅ **Batch നിർമ്മിച്ചിരിക്കുന്നു!**\n🔗 **Batch ലിങ്ക്:** {batch_link}", parse_mode="Markdown")
         del user_data_store[user_id]
+
