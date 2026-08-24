@@ -217,41 +217,86 @@ async def handle_forwarded_files(update: Update, context: ContextTypes.DEFAULT_T
 
 
 
-# 📊 സ്റ്റാറ്റിസ്റ്റിക്സും ഡാറ്റാബേസ് സ്പേസും അറിയാനുള്ള പുതുക്കിയ കമാൻഡ് (Owner Only)
-from database import get_db_size  # 👈 ഈ വരി handlers.py-ൽ മുകളിലായി ഉണ്ടെന്ന് ഉറപ്പാക്കുക
+# 📊 സ്റ്റാറ്റ്സ് വിവരങ്ങൾ ടെക്സ്റ്റ് ഫോർമാറ്റിൽ ആക്കുന്ന പൊതുവായ ഫങ്ക്ഷൻ
+async def generate_stats_text():
+    total_users = users_collection.count_documents({})
+    total_batches = batch_collection.count_documents({})
+    total_requests = requests_collection.count_documents({})
+    current_channel = get_req_channel()
 
+    # 1. MongoDB Space
+    used_db_space = get_db_size()
+    total_db_limit = 512.00
+    remaining_db_space = max(0.0, total_db_limit - used_db_space)
+    db_used_percentage = round((used_db_space / total_db_limit) * 100, 2)
+
+    # 2. Koyeb RAM
+    koyeb_ram_limit = int(os.getenv("KOYEB_INSTANCE_MEMORY_MB", 512))
+    koyeb_instance_type = os.getenv("KOYEB_INSTANCE_TYPE", "nano")
+    
+    process = psutil.Process(os.getpid())
+    bot_ram_used_bytes = process.memory_info().rss
+    bot_ram_used_mb = round(bot_ram_used_bytes / (1024 * 1024), 2)
+    
+    koyeb_remaining_ram = max(0.0, koyeb_ram_limit - bot_ram_used_mb)
+    koyeb_used_percentage = round((bot_ram_used_mb / koyeb_ram_limit) * 100, 2)
+
+    channel_text = f"`{current_channel}`" if current_channel else "സെറ്റ് ചെയ്തിട്ടില്ല ❌"
+
+    text = (
+        f"📊 **ബോട്ട് സ്റ്റാറ്റിസ്റ്റിക്സ് (Bot Stats)**\n\n"
+        f"👤 **ആകെ ഉപയോക്താക്കൾ:** {total_users}\n"
+        f"📦 **ആകെ ബാച്ച് ലിങ്കുകൾ:** {total_batches}\n"
+        f"📩 **നിലവിലുള്ള ജോയിൻ റിക്വസ്റ്റുകൾ:** {total_requests}\n\n"
+        
+        f"💾 **ഡാറ്റാബേസ് വിവരങ്ങൾ (MongoDB):**\n"
+        f" └ 📉 ഉപയോഗിച്ചത്: `{used_db_space} MB` ({db_used_percentage}%)\n"
+        f" └ 📈 ബാക്കിയുള്ളത്: `{remaining_db_space} MB` / `512 MB`\n\n"
+        
+        f"🚀 **ஹோஸ்டிங் വിവരങ്ങൾ (Koyeb):**\n"
+        f" └ 🆔 ഇൻസ്റ്റൻസ് തരം: `{koyeb_instance_type.upper()}`\n"
+        f" └ 📉 ബോട്ട് ഉപയോഗിക്കുന്ന റാം: `{bot_ram_used_mb} MB` ({koyeb_used_percentage}%)\n"
+        f" └ 📈 ഹോസ്റ്റിംഗിൽ ബാക്കിയുള്ള റാം: `{koyeb_remaining_ram} MB` / `{koyeb_ram_limit} MB`\n\n"
+        
+        f"📢 **നിലവിലെ റിക്വസ്റ്റ് ചാനൽ ഐഡി:** {channel_text}"
+    )
+    return text
+
+# 📊 /stats കമാൻഡ് വഴി ആദ്യം മെസ്സേജ് അയക്കുന്നു
 async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
-    
     if user_id != OWNER_ID:
         return
 
-    await update.message.reply_text("📊 വിവരങ്ങൾ ശേഖരിക്കുന്നു, ദയവായി കാത്തിരിക്കൂ...")
+    # Refresh ബട്ടൺ ഉണ്ടാക്കുന്നു
+    keyboard = [[InlineKeyboardButton("🔄 Refresh Stats", callback_data="refresh_stats")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
 
+    # വിവരങ്ങൾ ശേഖരിച്ച് മെസ്സേജ് അയക്കുന്നു
+    stats_text = await generate_stats_text()
+    await update.message.reply_text(stats_text, reply_markup=reply_markup, parse_mode="Markdown")
+
+# 🔄 ബട്ടൺ അമർത്തുമ്പോൾ മെസ്സേജ് എഡിറ്റ് ചെയ്യുന്ന ഫങ്ക്ഷൻ
+async def stats_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    user_id = query.from_user.id
+    
+    # സുരക്ഷയ്ക്കായി ഓണർ തന്നെയാണോ ബട്ടൺ അമർത്തുന്നത് എന്ന് നോക്കുന്നു
+    if user_id != OWNER_ID:
+        await query.answer("🔒 ക്ഷമിക്കണം, നിങ്ങൾക്ക് ഇതിന് അനുവാദമില്ല!", show_alert=True)
+        return
+
+    await query.answer("🔄 വിവരങ്ങൾ പുതുക്കുന്നു...")
+    
+    # പുതിയ വിവരങ്ങൾ ശേഖരിക്കുന്നു
+    updated_text = await generate_stats_text()
+    
+    # പഴയ മെസ്സേജ് പുതിയ വിവരങ്ങൾ വെച്ച് എഡിറ്റ് ചെയ്യുന്നു
+    keyboard = [[InlineKeyboardButton("🔄 Refresh Stats", callback_data="refresh_stats")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
     try:
-        total_users = users_collection.count_documents({})
-        total_batches = batch_collection.count_documents({})
-        total_requests = requests_collection.count_documents({})
-        current_channel = get_req_channel()
-
-        # 💾 ഡാറ്റാബേസ് സ്പേസ് കണക്കുകൂട്ടലുകൾ
-        used_space = get_db_size()  # നിലവിൽ ഉപയോഗിച്ച സൈസ് (MB)
-        total_free_limit = 512.00  # MongoDB ഫ്രീ പ്ലാൻ ലിമിറ്റ് (512 MB)
-        remaining_space = max(0.0, total_free_limit - used_space)  # ബാക്കിയുള്ള സ്പേസ്
-        used_percentage = round((used_space / total_free_limit) * 100, 2) # ഉപയോഗിച്ച ശതമാനം
-
-        channel_text = f"`{current_channel}`" if current_channel else "സെറ്റ് ചെയ്തിട്ടില്ല ❌"
-
-        await update.message.reply_text(
-            f"📊 **ബോട്ട് സ്റ്റാറ്റിസ്റ്റിക്സ് (Bot Stats)**\n\n"
-            f"👤 **ആകെ ഉപയോക്താക്കൾ:** {total_users}\n"
-            f"📦 **ആകെ ബാച്ച് ലിങ്കുകൾ:** {total_batches}\n"
-            f"📩 **നിലവിലുള്ള ജോയിൻ റിക്വസ്റ്റുകൾ:** {total_requests}\n\n"
-            f"💾 **ഡാറ്റാബേസ് വിവരങ്ങൾ (MongoDB):**\n"
-            f" └ 📉 ഉപയോഗിച്ചത്: `{used_space} MB` ({used_percentage}%)\n"
-            f" └ 📈 ബാക്കിയുള്ളത്: `{remaining_space} MB` / `512 MB`\n\n"
-            f"📢 **നിലവിലെ റിക്വസ്റ്റ് ചാനൽ ഐഡി:** {channel_text}",
-            parse_mode="Markdown"
-        )
-    except Exception as e:
-        await update.message.reply_text(f"❌ സ്റ്റാറ്റ്സ് എടുക്കുന്നതിൽ പരാജയപ്പെട്ടു: {e}")
+        await query.edit_message_text(text=updated_text, reply_markup=reply_markup, parse_mode="Markdown")
+    except TelegramError:
+        # ഡാറ്റയിൽ മാറ്റങ്ങൾ ഒന്നും വന്നിട്ടില്ലെങ്കിൽ എറർ വരാതിരിക്കാൻ
+        pass
