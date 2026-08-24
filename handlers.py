@@ -100,7 +100,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("ഹലോ! ഞാൻ ഒരു അഡ്വാൻസ്ഡ് Force Join ഫീച്ചറുള്ള Batch File Share Bot ആണ്. 📂")
 
-# /setchannel കമാൻഡ്
+# /setchannel കമാൻഡ് (പഴയ റിക്വസ്റ്റുകൾ ക്ലിയർ ചെയ്യുന്ന പുതുക്കിയ രീതി)
 async def set_channel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     if user_id != OWNER_ID:
@@ -118,10 +118,20 @@ async def set_channel_command(update: Update, context: ContextTypes.DEFAULT_TYPE
             await update.message.reply_text("❌ ബോട്ടിന് ഈ ചാനലിൽ പ്രവേശനമില്ല! ആദ്യം ബോട്ടിനെ ആ ചാനലിൽ **Admin** ആക്കുക.")
             return
 
+        # 1. പുതിയ ചാനൽ ഐഡി ഡാറ്റാബേസിൽ അപ്‌ഡേറ്റ് ചെയ്യുന്നു
         settings_collection.update_one({'_id': 'fsub_config'}, {'$set': {'channel_id': new_channel_id}}, upsert=True)
-        await update.message.reply_text(f"✅ **റിക്വസ്റ്റ് ചാനൽ മാറ്റിയിരിക്കുന്നു!**\n🆔 ID: `{new_channel_id}`", parse_mode="Markdown")
+        
+        # 2. 🔥 പുതിയ മാറ്റം: പഴയ റിക്വസ്റ്റുകൾ എല്ലാം ഡാറ്റാബേസിൽ നിന്ന് തനിയെ ഡിലീറ്റ് ചെയ്യുന്നു
+        requests_collection.delete_many({}) 
+        
+        await update.message.reply_text(
+            f"✅ **റിക്വസ്റ്റ് ചാനൽ മാറ്റിയിരിക്കുന്നു!**\n🆔 ID: `{new_channel_id}`\n\n"
+            f"🧹 _ഡാറ്റാബേസിലെ പഴയ ജോയിൻ റിക്വസ്റ്റുകൾ എല്ലാം വിജയകരമായി ക്ലിയർ ചെയ്തിട്ടുണ്ട്._", 
+            parse_mode="Markdown"
+        )
     except ValueError:
         await update.message.reply_text("❌ തെറ്റായ ഐഡി ഫോർമാറ്റ്!")
+
 
 # Broadcasting കമാൻഡ് (Owner Only)
 async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
