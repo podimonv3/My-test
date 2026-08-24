@@ -1,102 +1,137 @@
 import logging
+import base64
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from pymongo import MongoClient
 
-# info.py ഫയലിൽ നിന്നും വേരിയബിളുകൾ ഇംപോർട്ട് ചെയ്യുന്നു
-from info import BOT_TOKEN, MONGO_URI
+from info import BOT_TOKEN, MONGO_URI, OWNER_ID
 
-# ലോഗിൻ വിവരങ്ങൾ റെക്കോർഡ് ചെയ്യാൻ
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-# MongoDB കണക്ഷൻ സെറ്റപ്പ്
+# MongoDB സെറ്റപ്പ്
 try:
     client = MongoClient(MONGO_URI)
-    db = client['telegram_fileshare_bot']
-    files_collection = db['files']
-    counters_collection = db['counters']
-    print("✅ MongoDB ഡാറ്റാബേസുമായി വിജയകരമായി കണക്ട് ചെയ്തിരിക്കുന്നു!")
+    db = client['telegram_forward_batch_bot']
+    batch_collection = db['batches']
+    print("✅ MongoDB-യുമായി വിജയകരമായി കണക്ട് ചെയ്തിരിക്കുന്നു!")
 except Exception as e:
     print(f"❌ MongoDB കണക്ഷൻ പരാജയപ്പെട്ടു: {e}")
 
-# ഫയൽ ഐഡി കൗണ്ടർ നിയന്ത്രിക്കാൻ (file_1, file_2...)
-def get_next_sequence_value():
-    sequence_document = counters_collection.find_one_and_update(
-        {'_id': 'file_id_counter'},
-        {'$inc': {'sequence_value': 1}},
-        upsert=True,
-        return_document=True
-    )
-    return sequence_document['sequence_value']
+# ഓരോ യൂസറുടെയും ആദ്യത്തെ ഫയൽ താൽക്കാലികമായി ഓർത്തു വെക്കാൻ
+user_data_store = {}
 
-# /start കമാൻഡ് ഹാൻഡ്‌ലർ
+# /start കമാൻഡ്
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if context.args:
-        file_id = context.args[0]  # ആദ്യത്തെ ആർഗ്യുമെന്റ് എടുക്കുന്നു
+        batch_id = context.args
+        batch_data = batch_collection.find_one({'batch_id': batch_id})
         
-        # ഡാറ്റാബേസിൽ ഫയൽ ഉണ്ടോ എന്ന് നോക്കുന്നു
-        file_data = files_collection.find_one({'share_id': file_id})
-        
-        if file_data:
-            real_file_id = file_data['file_id']
-            file_type = file_data['type']
+        if batch_data:
+            from_chat = batch_data['from_chat']
+            start_id = batch_data['start_id']
+            end_id = batch_data['end_id']
             
-            await update.message.reply_text("താങ്കൾ തിരഞ്ഞ ഫയൽ താഴെ നൽകുന്നു 👇")
+            await update.message.reply_text("📦 താങ്കൾ തിരഞ്ഞ ഫയലുകൾ താഴെ നൽകുന്നു...")
             
-            if file_type == 'document':
-                await update.message.reply_document(document=real_file_id)
-            elif file_type == 'photo':
-                await update.message.reply_photo(photo=real_file_id)
-            elif file_type == 'video':
-                await update.message.reply_video(video=real_file_id)
-            elif file_type == 'audio':
-                await update.message.reply_audio(audio=real_file_id)
+            success_count = 0
+            for msg_id in range(start_id, end_id + 1):
+                try:
+                    await context.bot.copy_message(
+                        chat_id=update.message.chat_id,
+                        from_chat_id=from_chat,
+                        message_id=msg_id
+                    )
+                    success_count += 1
+                except:
+                    continue
+            
+            if success_count == 0:
+                await update.message.reply_text("❌ ക്ഷമിക്കണം, ഫയലുകൾ ഒന്നും കണ്ടെത്താനായില്ല!")
         else:
-            await update.message.reply_text("❌ ക്ഷമിക്കണം, ഈ ഫയൽ കണ്ടെത്താനായില്ല അല്ലെങ്കിൽ ലിങ്ക് തെറ്റാണ്!")
+            await update.message.reply_text("❌ തെറ്റായ ലിങ്ക് അല്ലെങ്കിൽ ഈ ബാച്ച് നിലവിലില്ല!")
     else:
         await update.message.reply_text(
-            "ഹലോ! ഞാൻ ഒരു ലോങ്-ടേം ഫയൽ ഷെയറിംഗ് ബോട്ട് ആണ്. 📂\n\n"
-            "എനിക്ക് ഏതെങ്കിലും ഫയൽ അയച്ചു തരൂ, ഞാൻ അതിനൊരു സ്ഥിരമായ (Permanent) ലിങ്ക് നിർമ്മിച്ച് നൽകാം."
+            "ഹലോ! ഞാൻ ഒരു Batch File Share Bot ആണ്. 📂\n\n"
+            "**ഉപയോഗിക്കേണ്ട രീതി (For Owner):**\n"
+            "ചാനലിൽ നിന്നും ആദ്യത്തെ ഫയലും, തുടർന്ന് അവസാനത്തെ ഫയലും ഇങ്ങോട്ട് **Forward** ചെയ്യുക. ഞാൻ ബാച്ച് ലിങ്ക് നൽകാം."
         )
 
-# ഫയലുകൾ സ്വീകരിക്കുന്ന ഫങ്ക്ഷൻ
-async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.message.document:
-        real_file_id = update.message.document.file_id
-        file_type = 'document'
-    elif update.message.photo:
-        real_file_id = update.message.photo[-1].file_id
-        file_type = 'photo'
-    elif update.message.video:
-        real_file_id = update.message.video.file_id
-        file_type = 'video'
-    elif update.message.audio:
-        real_file_id = update.message.audio.file_id
-        file_type = 'audio'
-    else:
-        await update.message.reply_text("⚠️ ദയവായി ഒരു ഫയൽ മാത്രം അയക്കുക!")
+# ഫയലുകൾ ഫോർവേഡ് ചെയ്യുമ്പോൾ കൈകാര്യം ചെയ്യുന്ന ഫങ്ക്ഷൻ
+async def handle_forwarded_files(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.message.from_user.id
+    
+    # ബോട്ട് ഓണർക്കാണോ എന്ന് പരിശോധിക്കുന്നു
+    if user_id != OWNER_ID:
+        await update.message.reply_text("🔒 ക്ഷമിക്കണം, ഈ ബോട്ട് ഉപയോഗിക്കാൻ നിങ്ങൾക്ക് അനുവാദമില്ല!")
         return
 
-    # പുതിയ യുണീക് ഐഡി ഡാറ്റാബേസിൽ നിന്ന് എടുക്കുന്നു
-    current_counter = get_next_sequence_value()
-    share_id = f"file_{current_counter}"
+    # ഫയൽ ചാനലിൽ നിന്ന് ഫോർവേഡ് ചെയ്തതാണോ എന്ന് നോക്കുന്നു
+    if not update.message.forward_origin:
+        await update.message.reply_text("⚠️ ദയവായി ഒരു ചാനലിൽ നിന്നും ഫയൽ **Forward** ചെയ്ത് അയക്കുക!")
+        return
+        
+    origin = update.message.forward_origin
     
-    # ഫയൽ വിവരങ്ങൾ ഡാറ്റാബേസിലേക്ക് സേവ് ചെയ്യുന്നു
-    files_collection.insert_one({
-        'share_id': share_id,
-        'file_id': real_file_id,
-        'type': file_type
-    })
+    # ചാനൽ ഐഡിയും മെസ്സേജ് ഐഡിയും എടുക്കുന്നു
+    if hasattr(origin, 'chat') and origin.chat:
+        chat_id = origin.chat.id
+        msg_id = origin.message_id
+    else:
+        await update.message.reply_text("❌ ഈ ചാനലിൽ നിന്നുള്ള ഫയൽ ഐഡി എടുക്കാൻ കഴിഞ്ഞില്ല. ചാനൽ പ്രൈവസി സെറ്റിങ്സ് പരിശോധിക്കുക!")
+        return
 
-    bot_info = await context.bot.get_me()
-    bot_username = bot_info.username
-    share_link = f"https://t.me{bot_username}?start={share_id}"
-
-    await update.message.reply_text(
-        f"✅ നിങ്ങളുടെ ഫയൽ ഡാറ്റാബേസിൽ സുരക്ഷിതമായി സേവ് ചെയ്തിരിക്കുന്നു!\n\n"
-        f"🔗 സ്ഥിരമായ ലിങ്ക്: {share_link}\n\n"
-        f"ഈ ലിങ്ക് ഒരിക്കലും നഷ്ടപ്പെടില്ല."
-    )
+    # ഈ യൂസർ ഇതിനു മുൻപ് ആദ്യത്തെ ഫയൽ അയച്ചിട്ടില്ലെങ്കിൽ, ഇത് ആദ്യ ഫയലായി സേവ് ചെയ്യുന്നു
+    if user_id not in user_data_store:
+        user_data_store[user_id] = {
+            'chat_id': chat_id,
+            'start_msg_id': msg_id
+        }
+        await update.message.reply_text(
+            "📥 **ആദ്യത്തെ ഫയൽ സ്വീകരിച്ചിരിക്കുന്നു!**\n\n"
+            "ഇനി ബാച്ചിന്റെ **അവസാനത്തെ ഫയൽ** കൂടി ഇതേ ചാനലിൽ നിന്നും ഫോർവേഡ് ചെയ്ത് അയക്കൂ..."
+        )
+    else:
+        # രണ്ടാമത്തെ ഫയൽ വരുമ്പോൾ ബാച്ച് ലിങ്ക് ഉണ്ടാക്കുന്നു
+        first_file_data = user_data_store[user_id]
+        
+        # രണ്ട് ഫയലും ഒരേ ചാനലിൽ നിന്നാണോ എന്ന് ഉറപ്പ് വരുത്തുന്നു
+        if first_file_data['chat_id'] != chat_id:
+            await update.message.reply_text("❌ എറർ! രണ്ട് ഫയലുകളും ഒരേ ചാനലിൽ നിന്നും തന്നെ ഫോർവേഡ് ചെയ്യണം. വീണ്ടും ശ്രമിക്കുക!")
+            del user_data_store[user_id] # താൽക്കാലിക ഡാറ്റ ക്ലിയർ ചെയ്യുന്നു
+            return
+            
+        start_id = min(first_file_data['start_msg_id'], msg_id)
+        end_id = max(first_file_data['start_msg_id'], msg_id)
+        
+        # യുണീക് ബാച്ച് ഐഡി നിർമ്മിക്കുന്നു
+        unique_str = f"{chat_id}_{start_id}_{end_id}"
+        batch_id = base64.urlsafe_b64encode(unique_str.encode()).decode().replace("=", "")
+        
+        # ഡാറ്റാബേസിലേക്ക് മാറ്റുന്നു
+        batch_collection.update_one(
+            {'batch_id': batch_id},
+            {'$set': {
+                'batch_id': batch_id,
+                'from_chat': chat_id,
+                'start_id': start_id,
+                'end_id': end_id
+            }},
+            upsert=True
+        )
+        
+        bot_info = await context.bot.get_me()
+        batch_link = f"https://t.me{bot_info.username}?start={batch_id}"
+        
+        await update.message.reply_text(
+            f"✅ **Batch വിജയകരമായി നിർമ്മിച്ചിരിക്കുന്നു!**\n\n"
+            f"📊 ആകെ ഫയലുകൾ: {end_id - start_id + 1} എണ്ണം\n"
+            f"🔗 **നിങ്ങളുടെ Batch ലിങ്ക്:** {batch_link}\n\n"
+            f"_(അടുത്ത ബാച്ച് ഉണ്ടാക്കാൻ വീണ്ടും ആദ്യത്തെ ഫയൽ ഫോർവേഡ് ചെയ്യാം)_",
+            parse_mode="Markdown"
+        )
+        
+        # ബാച്ച് കഴിഞ്ഞതു കൊണ്ട് ഈ യൂസറുടെ താൽക്കാലിക മെമ്മറി ക്ലിയർ ചെയ്യുന്നു
+        del user_data_store[user_id]
 
 def main():
     if not BOT_TOKEN or not MONGO_URI:
@@ -106,8 +141,9 @@ def main():
     app = Application.builder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     
-    file_filters = filters.Document.ALL | filters.PHOTO | filters.VIDEO | filters.AUDIO
-    app.add_handler(MessageHandler(file_filters, handle_file))
+    # ഫോർവേഡ് ചെയ്ത് വരുന്ന ഫയലുകളെ പിടിച്ചെടുക്കാൻ (ഫോട്ടോ, വീഡിയോ, ഡോക്യുമെന്റ്, ഓഡിയോ)
+    forward_filters = filters.FORWARDED & (filters.Document.ALL | filters.PHOTO | filters.VIDEO | filters.AUDIO)
+    app.add_handler(MessageHandler(forward_filters, handle_forwarded_files))
 
     print("ബോട്ട് റൺ ആകുന്നു...")
     app.run_polling()
