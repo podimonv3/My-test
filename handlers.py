@@ -107,7 +107,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("ഹലോ! ഞാൻ ഒരു അഡ്വാൻസ്ഡ് Force Join ഫീച്ചറുള്ള Batch File Share Bot ആണ്. 📂")
 
-# /setchannel കമാൻഡ്
+# /setchannel കമാൻഡ് (തിരുത്തിയ ഭാഗം 🛠️)
 async def set_channel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     if user_id != OWNER_ID:
@@ -118,7 +118,8 @@ async def set_channel_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         return
 
     try:
-        new_channel_id = int(context.args)
+        # ലിസ്റ്റിലെ ആദ്യത്തെ വാല്യൂ [0] എടുത്ത് അതിനെ int ആക്കി മാറ്റുന്നു 👇
+        new_channel_id = int(context.args[0])
         try:
             await context.bot.get_chat(new_channel_id)
         except TelegramError:
@@ -135,6 +136,7 @@ async def set_channel_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         )
     except (ValueError, IndexError):
         await update.message.reply_text("❌ തെറ്റായ ഐഡി ഫോർമാറ്റ്!")
+
 
 # /broadcast കമാൻഡ്
 async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
