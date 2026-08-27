@@ -1,15 +1,24 @@
 import base64
 import asyncio
+import os
+import psutil  # 👈 റാം വിവരങ്ങൾ എടുക്കാൻ ആവശ്യമായ ലൈബ്രറി ചേർത്തു
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from telegram.error import TelegramError
-import os
 
 from info import OWNER_ID
-from database import batch_collection, requests_collection, settings_collection, users_collection, get_req_channel, add_user
-from database import get_db_size
+from database import (
+    batch_collection, 
+    requests_collection, 
+    settings_collection, 
+    users_collection, 
+    get_req_channel, 
+    add_user,
+    get_db_size
+)
 
 user_data_store = {}
+
 
 # Join Request വരുന്നത് ട്രാക്ക് ചെയ്യാൻ
 async def handle_join_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -48,7 +57,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     current_channel = get_req_channel()
     
     if context.args:
-        batch_id = context.args
+        batch_id = context.args[0] if isinstance(context.args, list) else context.args
         
         allowed = await has_requested_or_joined(context, user_id)
         if not allowed:
@@ -78,7 +87,6 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             start_id = batch_data['start_id']
             end_id = batch_data['end_id']
             
-            # Welcome Message / Ads 
             await update.message.reply_text(
                 "✨ **താങ്കൾ തിരഞ്ഞ ഫയലുകൾ താഴെ നൽകുന്നു!**\n\n"
                 "📢 കൂടുതൽ ഫയലുകൾക്കായി ഞങ്ങളോടൊപ്പം തുടരുക! 👇"
@@ -86,9 +94,6 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             for msg_id in range(start_id, end_id + 1):
                 try:
-                    # 🔥 ഇവിടുത്തെ മാറ്റം ശ്രദ്ധിക്കുക:
-                    # 1. copy_message ഉപയോഗിച്ചതിനാൽ ചാനൽ പേര് (Forward Tag) കാണില്ല.
-                    # 2. protect_content=True നൽകിയതിനാൽ ഫയൽ ഫോർവേഡ് ചെയ്യാനോ സേവ് ചെയ്യാനോ സാധിക്കില്ല.
                     await context.bot.copy_message(
                         chat_id=update.message.chat_id,
                         from_chat_id=from_chat,
@@ -102,7 +107,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("ഹലോ! ഞാൻ ഒരു അഡ്വാൻസ്ഡ് Force Join ഫീച്ചറുള്ള Batch File Share Bot ആണ്. 📂")
 
-# /setchannel കമാൻഡ് (പഴയ റിക്വസ്റ്റുകൾ ക്ലിയർ ചെയ്യുന്ന പുതുക്കിയ രീതി)
+# /setchannel കമാൻഡ്
 async def set_channel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     if user_id != OWNER_ID:
@@ -120,10 +125,7 @@ async def set_channel_command(update: Update, context: ContextTypes.DEFAULT_TYPE
             await update.message.reply_text("❌ ബോട്ടിന് ഈ ചാനലിൽ പ്രവേശനമില്ല! ആദ്യം ബോട്ടിനെ ആ ചാനലിൽ **Admin** ആക്കുക.")
             return
 
-        # 1. പുതിയ ചാനൽ ഐഡി ഡാറ്റാബേസിൽ അപ്‌ഡേറ്റ് ചെയ്യുന്നു
         settings_collection.update_one({'_id': 'fsub_config'}, {'$set': {'channel_id': new_channel_id}}, upsert=True)
-        
-        # 2. 🔥 പുതിയ മാറ്റം: പഴയ റിക്വസ്റ്റുകൾ എല്ലാം ഡാറ്റാബേസിൽ നിന്ന് തനിയെ ഡിലീറ്റ് ചെയ്യുന്നു
         requests_collection.delete_many({}) 
         
         await update.message.reply_text(
@@ -131,11 +133,10 @@ async def set_channel_command(update: Update, context: ContextTypes.DEFAULT_TYPE
             f"🧹 _ഡാറ്റാബേസിലെ പഴയ ജോയിൻ റിക്വസ്റ്റുകൾ എല്ലാം വിജയകരമായി ക്ലിയർ ചെയ്തിട്ടുണ്ട്._", 
             parse_mode="Markdown"
         )
-    except ValueError:
+    except (ValueError, IndexError):
         await update.message.reply_text("❌ തെറ്റായ ഐഡി ഫോർമാറ്റ്!")
 
-
-# Broadcasting കമാൻഡ് (Owner Only)
+# /broadcast കമാൻഡ്
 async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     if user_id != OWNER_ID:
@@ -176,16 +177,15 @@ async def handle_forwarded_files(update: Update, context: ContextTypes.DEFAULT_T
     if user_id != OWNER_ID:
         return
 
-    if not update.message.forward_origin:
+    if not update.message.forward_date:
         await update.message.reply_text("⚠️ ദയവായി ഒരു ചാനലിൽ നിന്നും ഫയൽ **Forward** ചെയ്ത് അയക്കുക!")
         return
         
-    origin = update.message.forward_origin
-    if hasattr(origin, 'chat') and origin.chat:
-        chat_id = origin.chat.id
-        msg_id = origin.message_id
-    else:
-        await update.message.reply_text("❌ ഫയൽ ഐഡി എടുക്കാൻ കഴിഞ്ഞില്ല.")
+    chat_id = update.message.forward_from_chat.id if update.message.forward_from_chat else None
+    msg_id = update.message.forward_from_message_id if update.message.forward_from_message_id else None
+    
+    if not chat_id or not msg_id:
+        await update.message.reply_text("❌ ഈ ഫയലിൽ നിന്നും ചാനൽ ഡാറ്റ എടുക്കാൻ കഴിഞ്ഞില്ല. ചാനൽ പബ്ലിക് ആണെന്ന് ഉറപ്പാക്കുക.")
         return
 
     if user_id not in user_data_store:
@@ -218,27 +218,33 @@ async def handle_forwarded_files(update: Update, context: ContextTypes.DEFAULT_T
 
 
 
-
-# 📊 സ്റ്റാറ്റ്സ് വിവരങ്ങൾ ടെക്സ്റ്റ് ഫോർമാറ്റിൽ ആക്കുന്ന പൊതുവായ ഫങ്ക്ഷൻ
-async def generate_stats_text():
+# 📊 സ്റ്റാറ്റിസ്റ്റിക്സ് വിവരങ്ങൾ ശേഖരിക്കുന്ന ഫങ്ക്ഷൻ (ക്രാഷ് പ്രൊട്ടക്ഷൻ ഉൾപ്പെടുത്തിയത് 🛡️)
+async def generate_stats_text() -> str:
     total_users = users_collection.count_documents({})
     total_batches = batch_collection.count_documents({})
     total_requests = requests_collection.count_documents({})
     current_channel = get_req_channel()
 
-    # 1. MongoDB Space
-    used_db_space = get_db_size()
+    try:
+        used_db_space = get_db_size()
+        if used_db_space is None:
+            used_db_space = 0.0
+    except:
+        used_db_space = 0.0
+
     total_db_limit = 512.00
     remaining_db_space = max(0.0, total_db_limit - used_db_space)
     db_used_percentage = round((used_db_space / total_db_limit) * 100, 2)
 
-    # 2. Koyeb RAM
     koyeb_ram_limit = int(os.getenv("KOYEB_INSTANCE_MEMORY_MB", 512))
     koyeb_instance_type = os.getenv("KOYEB_INSTANCE_TYPE", "nano")
     
-    process = psutil.Process(os.getpid())
-    bot_ram_used_bytes = process.memory_info().rss
-    bot_ram_used_mb = round(bot_ram_used_bytes / (1024 * 1024), 2)
+    try:
+        process = psutil.Process(os.getpid())
+        bot_ram_used_bytes = process.memory_info().rss
+        bot_ram_used_mb = round(bot_ram_used_bytes / (1024 * 1024), 2)
+    except:
+        bot_ram_used_mb = 0.0
     
     koyeb_remaining_ram = max(0.0, koyeb_ram_limit - bot_ram_used_mb)
     koyeb_used_percentage = round((bot_ram_used_mb / koyeb_ram_limit) * 100, 2)
@@ -255,7 +261,7 @@ async def generate_stats_text():
         f" └ 📉 ഉപയോഗിച്ചത്: `{used_db_space} MB` ({db_used_percentage}%)\n"
         f" └ 📈 ബാക്കിയുള്ളത്: `{remaining_db_space} MB` / `512 MB`\n\n"
         
-        f"🚀 **ஹோஸ்டிங் വിവരങ്ങൾ (Koyeb):**\n"
+        f"🚀 **ഹോസ്റ്റിംഗ് വിവരങ്ങൾ (Koyeb):**\n"
         f" └ 🆔 ഇൻസ്റ്റൻസ് തരം: `{koyeb_instance_type.upper()}`\n"
         f" └ 📉 ബോട്ട് ഉപയോഗിക്കുന്ന റാം: `{bot_ram_used_mb} MB` ({koyeb_used_percentage}%)\n"
         f" └ 📈 ഹോസ്റ്റിംഗിൽ ബാക്കിയുള്ള റാം: `{koyeb_remaining_ram} MB` / `{koyeb_ram_limit} MB`\n\n"
@@ -264,41 +270,35 @@ async def generate_stats_text():
     )
     return text
 
-# 📊 /stats കമാൻഡ് വഴി ആദ്യം മെസ്സേജ് അയക്കുന്നു
+# /stats കമാൻഡ് വഴി ആദ്യം മെസ്സേജ് അയക്കുന്നു
 async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     if user_id != OWNER_ID:
         return
 
-    # Refresh ബട്ടൺ ഉണ്ടാക്കുന്നു
     keyboard = [[InlineKeyboardButton("🔄 Refresh Stats", callback_data="refresh_stats")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    # വിവരങ്ങൾ ശേഖരിച്ച് മെസ്സേജ് അയക്കുന്നു
     stats_text = await generate_stats_text()
     await update.message.reply_text(stats_text, reply_markup=reply_markup, parse_mode="Markdown")
 
-# 🔄 ബട്ടൺ അമർത്തുമ്പോൾ മെസ്സേജ് എഡിറ്റ് ചെയ്യുന്ന ഫങ്ക്ഷൻ
+# ബട്ടൻ അമർത്തുമ്പോൾ മെസ്സേജ് എഡിറ്റ് ചെയ്യുന്ന ഫങ്ക്ഷൻ
 async def stats_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     user_id = query.from_user.id
     
-    # സുരക്ഷയ്ക്കായി ഓണർ തന്നെയാണോ ബട്ടൺ അമർത്തുന്നത് എന്ന് നോക്കുന്നു
     if user_id != OWNER_ID:
         await query.answer("🔒 ക്ഷമിക്കണം, നിങ്ങൾക്ക് ഇതിന് അനുവാദമില്ല!", show_alert=True)
         return
 
     await query.answer("🔄 വിവരങ്ങൾ പുതുക്കുന്നു...")
-    
-    # പുതിയ വിവരങ്ങൾ ശേഖരിക്കുന്നു
     updated_text = await generate_stats_text()
     
-    # പഴയ മെസ്സേജ് പുതിയ വിവരങ്ങൾ വെച്ച് എഡിറ്റ് ചെയ്യുന്നു
     keyboard = [[InlineKeyboardButton("🔄 Refresh Stats", callback_data="refresh_stats")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     try:
         await query.edit_message_text(text=updated_text, reply_markup=reply_markup, parse_mode="Markdown")
     except TelegramError:
-        # ഡാറ്റയിൽ മാറ്റങ്ങൾ ഒന്നും വന്നിട്ടില്ലെങ്കിൽ എറർ വരാതിരിക്കാൻ
         pass
+
