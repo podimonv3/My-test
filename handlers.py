@@ -6,6 +6,7 @@ from telegram.error import TelegramError
 
 from info import OWNER_ID
 from database import batch_collection, requests_collection, settings_collection, users_collection, get_req_channel, add_user
+from database import get_db_size
 
 user_data_store = {}
 
