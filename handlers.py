@@ -34,19 +34,13 @@ async def handle_join_request(update: Update, context: ContextTypes.DEFAULT_TYPE
             upsert=True
         )
 
-# ചാനലിൽ ഉണ്ടോ എന്ന് നോക്കാൻ
+# യൂസർ Join Request അയച്ചിട്ടുണ്ടോ എന്ന് മാത്രം നോക്കാൻ (Updated 🛡️)
 async def has_requested_or_joined(context: ContextTypes.DEFAULT_TYPE, user_id: int) -> bool:
     current_channel = get_req_channel()
     if not current_channel:
         return True
         
-    try:
-        member = await context.bot.get_chat_member(chat_id=current_channel, user_id=user_id)
-        if member.status in ['member', 'administrator', 'creator']:
-            return True
-    except TelegramError:
-        pass
-
+    # ഡാറ്റാബേസിൽ റിക്വസ്റ്റ് വന്നിട്ടുണ്ടോ എന്ന് മാത്രം പരിശോധിക്കുന്നു
     db_check = requests_collection.find_one({'user_id': user_id, 'channel_id': current_channel, 'status': 'requested'})
     return bool(db_check)
 
@@ -57,12 +51,13 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     current_channel = get_req_channel()
     
     if context.args:
-        batch_id = context.args[0] if isinstance(context.args, list) else context.args
+        batch_id = context.args if isinstance(context.args, list) else context.args
         
         allowed = await has_requested_or_joined(context, user_id)
         if not allowed:
             try:
                 chat_info = await context.bot.get_chat(current_channel)
+                # ചാനൽ ലിങ്കിന് പകരം റിക്വസ്റ്റ് ലിങ്ക് (Invite Link) എടുക്കുന്നു
                 invite_link = chat_info.invite_link if chat_info.invite_link else f"https://t.me{chat_info.username}"
             except:
                 invite_link = "https://t.me"
@@ -106,6 +101,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("❌ തെറ്റായ ലിങ്ക് അല്ലെങ്കിൽ ഈ ബാച്ച് നിലവിലില്ല!")
     else:
         await update.message.reply_text("ഹലോ! ഞാൻ ഒരു അഡ്വാൻസ്ഡ് Force Join ഫീച്ചറുള്ള Batch File Share Bot ആണ്. 📂")
+
 
 # /setchannel കമാൻഡ് (തിരുത്തിയ ഭാഗം 🛠️)
 async def set_channel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -213,7 +209,7 @@ async def handle_forwarded_files(update: Update, context: ContextTypes.DEFAULT_T
         )
         
         bot_info = await context.bot.get_me()
-        batch_link = f"https://t.me{bot_info.username}?start={batch_id}"
+        batch_link = f"https://t.me/{bot_info.username}?start={batch_id}"
         
         await update.message.reply_text(f"✅ **Batch നിർമ്മിച്ചിരിക്കുന്നു!**\n🔗 **Batch ലിങ്ക്:** {batch_link}", parse_mode="Markdown")
         del user_data_store[user_id]
