@@ -58,7 +58,7 @@ async def handle_join_request(update: Update, context: ContextTypes.DEFAULT_TYPE
                             message_id=msg_id,
                             protect_content=True
                         )
-                    # ഫയലുകൾ അയച്ചതിന് ശേഷം താൽക്കാലിക ഡാറ്റ ക്ലിയർ ചെയ്യുന്നു
+                    # ഫയലുകൾ അയച്ചതിന് ശേഷം താൽക്കാലിക ബാച്ച് ഐഡി ഡാറ്റ ക്ലിയർ ചെയ്യുന്നു
                     requests_collection.update_one(
                         {'user_id': user_id, 'channel_id': chat_id},
                         {'$unset': {'batch_id': ""}}
@@ -66,14 +66,15 @@ async def handle_join_request(update: Update, context: ContextTypes.DEFAULT_TYPE
                 except:
                     pass
 
-# 2. /start കമാൻഡ് - യൂസർ റിക്വസ്റ്റ് അയച്ചിട്ടില്ലെങ്കിൽ ലിങ്ക് നൽകുകയും ബാച്ച് ഐഡി ഓർത്തു വെക്കുകയും ചെയ്യുന്നു 🧠
+# 2. /start കമാൻഡ് - ലിസ്റ്റ് പിഴവുകൾ പരിഹരിച്ചത് 🛠️
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     add_user(user_id)
     current_channel = get_req_channel()
     
     if context.args:
-        batch_id = context.args if isinstance(context.args, list) else context.args
+        # 🔥 ഇവിടെയാണ് മാറ്റം: ലിസ്റ്റിലെ ആദ്യത്തെ സ്ട്രിങ് എലമെന്റ് കൃത്യമായി വേർതിരിച്ചെടുക്കുന്നു 👇
+        batch_id = context.args[0] if isinstance(context.args, list) and len(context.args) > 0 else context.args
         
         # യൂസർ ഇതിനകം ചാനലിൽ മെമ്പർ ആണോ എന്ന് നോക്കുന്നു
         is_joined = False
@@ -96,7 +97,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 # ബോട്ട് സ്വന്തമായി ഒരു Join Request ഇൻവൈറ്റ് ലിങ്ക് നിർമ്മിക്കുന്നു 🔗
                 chat_info = await context.bot.create_chat_invite_link(
                     chat_id=current_channel,
-                    creates_join_request=True  # 👈 ഇത് വഴി ലിങ്കിൽ ക്ലിക്ക് ചെയ്താൽ 'Request' മാത്രമായിരിക്കും പോകുക
+                    creates_join_request=True
                 )
                 invite_link = chat_info.invite_link
             except:
@@ -135,7 +136,6 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("❌ തെറ്റായ ലിങ്ക് അല്ലെങ്കിൽ ഈ ബാച്ച് നിലവിലില്ല!")
     else:
         await update.message.reply_text("ഹലോ! ഞാൻ ഒരു അഡ്വാന്‍സ്ഡ് ജോയിൻ റിക്വസ്റ്റ് ഫീച്ചറുള്ള ഫയൽ ഷെയറിങ് ബോട്ട് ആണ്. 📂")
-
 
 
 # /setchannel കമാൻഡ് (തിരുത്തിയ ഭാഗം 🛠️)
