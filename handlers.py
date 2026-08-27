@@ -66,17 +66,17 @@ async def handle_join_request(update: Update, context: ContextTypes.DEFAULT_TYPE
                 except:
                     pass
 
-# 2. /start കമാൻഡ് - ലിസ്റ്റ് പിഴവുകൾ പരിഹരിച്ചത് 🛠️
+# /start കമാൻഡ് - ഒരു വട്ടം റിക്വസ്റ്റ് അയച്ചാൽ പിന്നീട് ചോദിക്കില്ല 🛡️
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     add_user(user_id)
     current_channel = get_req_channel()
     
     if context.args:
-        # 🔥 ഇവിടെയാണ് മാറ്റം: ലിസ്റ്റിലെ ആദ്യത്തെ സ്ട്രിങ് എലമെന്റ് കൃത്യമായി വേർതിരിച്ചെടുക്കുന്നു 👇
+        # ലിസ്റ്റിലെ ആദ്യത്തെ സ്ട്രിങ് എലമെന്റ് വേർതിരിച്ചെടുക്കുന്നു
         batch_id = context.args[0] if isinstance(context.args, list) and len(context.args) > 0 else context.args
         
-        # യൂസർ ഇതിനകം ചാനലിൽ മെമ്പർ ആണോ എന്ന് നോക്കുന്നു
+        # 1. യൂസർ ഇതിനകം ചാനലിൽ മെമ്പർ ആണോ എന്ന് നോക്കുന്നു
         is_joined = False
         try:
             member = await context.bot.get_chat_member(chat_id=current_channel, user_id=user_id)
@@ -85,7 +85,19 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except:
             pass
             
-        if not is_joined:
+        # 2. 🔥 യൂസർ നേരത്തെ ഈ ചാനലിലേക്ക് റിക്വസ്റ്റ് അയച്ചിട്ടുണ്ടോ എന്ന് ഡാറ്റാബേസിൽ നോക്കുന്നു
+        has_requested = False
+        if not is_joined and current_channel:
+            db_check = requests_collection.find_one({
+                'user_id': user_id, 
+                'channel_id': current_channel, 
+                'status': 'requested'
+            })
+            if db_check:
+                has_requested = True
+
+        # യൂസർ മെമ്പറും അല്ല, ഇതുവരെ റിക്വസ്റ്റും അയച്ചിട്ടില്ലെങ്കിൽ മാത്രം റിക്വസ്റ്റ് ചോദിക്കുക 👇
+        if not is_joined and not has_requested:
             # യൂസർക്ക് ഏത് ബാച്ച് ഫയൽ ആണോ വേണ്ടത്, അത് ഡാറ്റാബേസിൽ താൽക്കാലികമായി കുറിച്ചു വെക്കുന്നു
             requests_collection.update_one(
                 {'user_id': user_id, 'channel_id': current_channel},
@@ -114,7 +126,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
-        # യൂസർ ചാനലിൽ ഉണ്ടെങ്കിൽ നേരിട്ട് ഫയലുകൾ നൽകുന്നു
+        # മെമ്പർ ആണെങ്കിലോ, അല്ലെങ്കിൽ നേരത്തെ റിക്വസ്റ്റ് അയച്ചിട്ടുണ്ടെങ്കിലോ നേരിട്ട് ഫയലുകൾ നൽകുന്നു 🚀
         batch_data = batch_collection.find_one({'batch_id': batch_id})
         if batch_data:
             from_chat = batch_data['from_chat']
@@ -136,6 +148,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("❌ തെറ്റായ ലിങ്ക് അല്ലെങ്കിൽ ഈ ബാച്ച് നിലവിലില്ല!")
     else:
         await update.message.reply_text("ഹലോ! ഞാൻ ഒരു അഡ്വാന്‍സ്ഡ് ജോയിൻ റിക്വസ്റ്റ് ഫീച്ചറുള്ള ഫയൽ ഷെയറിങ് ബോട്ട് ആണ്. 📂")
+
 
 
 # /setchannel കമാൻഡ് (തിരുത്തിയ ഭാഗം 🛠️)
