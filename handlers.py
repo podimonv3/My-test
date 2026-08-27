@@ -3,6 +3,7 @@ import asyncio
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from telegram.error import TelegramError
+import os
 
 from info import OWNER_ID
 from database import batch_collection, requests_collection, settings_collection, users_collection, get_req_channel, add_user
