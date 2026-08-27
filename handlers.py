@@ -20,7 +20,7 @@ from database import (
 user_data_store = {}
 
 
-# Join Request വരുന്നത് ട്രാക്ക് ചെയ്യാൻ
+# 1. യൂസർ ചാനലിലേക്ക് റിക്വസ്റ്റ് അയക്കുമ്പോൾ തൽക്ഷണം ഫയൽ നൽകുന്ന ഫങ്ക്ഷൻ 🚀
 async def handle_join_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
     request = update.chat_join_request
     user_id = request.from_user.id
@@ -28,23 +28,45 @@ async def handle_join_request(update: Update, context: ContextTypes.DEFAULT_TYPE
     
     current_channel = get_req_channel()
     if chat_id == current_channel:
+        # ഡാറ്റാബേസിൽ റിക്വസ്റ്റ് വന്നിട്ടുണ്ടെന്ന് മാർക്ക് ചെയ്യുന്നു
         requests_collection.update_one(
             {'user_id': user_id, 'channel_id': chat_id},
             {'$set': {'user_id': user_id, 'channel_id': chat_id, 'status': 'requested'}},
             upsert=True
         )
-
-# യൂസർ Join Request അയച്ചിട്ടുണ്ടോ എന്ന് മാത്രം നോക്കാൻ (Updated 🛡️)
-async def has_requested_or_joined(context: ContextTypes.DEFAULT_TYPE, user_id: int) -> bool:
-    current_channel = get_req_channel()
-    if not current_channel:
-        return True
         
-    # ഡാറ്റാബേസിൽ റിക്വസ്റ്റ് വന്നിട്ടുണ്ടോ എന്ന് മാത്രം പരിശോധിക്കുന്നു
-    db_check = requests_collection.find_one({'user_id': user_id, 'channel_id': current_channel, 'status': 'requested'})
-    return bool(db_check)
+        # യൂസർക്ക് ലഭിക്കേണ്ട ബാച്ച് ഫയലുകൾ ഉണ്ടോ എന്ന് നോക്കുന്നു
+        user_pending = requests_collection.find_one({'user_id': user_id, 'channel_id': chat_id})
+        if user_pending and 'batch_id' in user_pending:
+            batch_id = user_pending['batch_id']
+            batch_data = batch_collection.find_one({'batch_id': batch_id})
+            
+            if batch_data:
+                from_chat = batch_data['from_chat']
+                start_id = batch_data['start_id']
+                end_id = batch_data['end_id']
+                
+                try:
+                    await context.bot.send_message(
+                        chat_id=user_id,
+                        text="✨ **നിങ്ങളുടെ ജോയിൻ റിക്വസ്റ്റ് ലഭിച്ചിരിക്കുന്നു! നിങ്ങൾ തിരഞ്ഞ ഫയലുകൾ താഴെ നൽകുന്നു:** 👇"
+                    )
+                    for msg_id in range(start_id, end_id + 1):
+                        await context.bot.copy_message(
+                            chat_id=user_id,
+                            from_chat_id=from_chat,
+                            message_id=msg_id,
+                            protect_content=True
+                        )
+                    # ഫയലുകൾ അയച്ചതിന് ശേഷം താൽക്കാലിക ഡാറ്റ ക്ലിയർ ചെയ്യുന്നു
+                    requests_collection.update_one(
+                        {'user_id': user_id, 'channel_id': chat_id},
+                        {'$unset': {'batch_id': ""}}
+                    )
+                except:
+                    pass
 
-# /start കമാൻഡ്
+# 2. /start കമാൻഡ് - യൂസർ റിക്വസ്റ്റ് അയച്ചിട്ടില്ലെങ്കിൽ ലിങ്ക് നൽകുകയും ബാച്ച് ഐഡി ഓർത്തു വെക്കുകയും ചെയ്യുന്നു 🧠
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     add_user(user_id)
@@ -53,40 +75,52 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if context.args:
         batch_id = context.args if isinstance(context.args, list) else context.args
         
-        allowed = await has_requested_or_joined(context, user_id)
-        if not allowed:
+        # യൂസർ ഇതിനകം ചാനലിൽ മെമ്പർ ആണോ എന്ന് നോക്കുന്നു
+        is_joined = False
+        try:
+            member = await context.bot.get_chat_member(chat_id=current_channel, user_id=user_id)
+            if member.status in ['member', 'administrator', 'creator']:
+                is_joined = True
+        except:
+            pass
+            
+        if not is_joined:
+            # യൂസർക്ക് ഏത് ബാച്ച് ഫയൽ ആണോ വേണ്ടത്, അത് ഡാറ്റാബേസിൽ താൽക്കാലികമായി കുറിച്ചു വെക്കുന്നു
+            requests_collection.update_one(
+                {'user_id': user_id, 'channel_id': current_channel},
+                {'$set': {'batch_id': batch_id, 'status': 'pending'}},
+                upsert=True
+            )
+            
             try:
-                chat_info = await context.bot.get_chat(current_channel)
-                # ചാനൽ ലിങ്കിന് പകരം റിക്വസ്റ്റ് ലിങ്ക് (Invite Link) എടുക്കുന്നു
-                invite_link = chat_info.invite_link if chat_info.invite_link else f"https://t.me{chat_info.username}"
+                # ബോട്ട് സ്വന്തമായി ഒരു Join Request ഇൻവൈറ്റ് ലിങ്ക് നിർമ്മിക്കുന്നു 🔗
+                chat_info = await context.bot.create_chat_invite_link(
+                    chat_id=current_channel,
+                    creates_join_request=True  # 👈 ഇത് വഴി ലിങ്കിൽ ക്ലിക്ക് ചെയ്താൽ 'Request' മാത്രമായിരിക്കും പോകുക
+                )
+                invite_link = chat_info.invite_link
             except:
                 invite_link = "https://t.me"
 
-            keyboard = [
-                [InlineKeyboardButton("📩 Request to Join", url=invite_link)],
-                [InlineKeyboardButton("🔄 Try Again", url=f"https://t.me{(await context.bot.get_me()).username}?start={batch_id}")]
-            ]
+            keyboard = [[InlineKeyboardButton("📩 Request to Join Channel", url=invite_link)]]
             reply_markup = InlineKeyboardMarkup(keyboard)
             
             await update.message.reply_text(
                 "⚠️ **ഫയലുകൾ ലഭിക്കുന്നതിനായി താഴെ കാണുന്ന ചാനലിലേക്ക് Join Request അയക്കുക!**\n\n"
-                "റിക്വസ്റ്റ് അയച്ചതിന് ശേഷം മാത്രം താഴെയുള്ള **Try Again** ബട്ടൺ അമർത്തുക.",
+                "👇 *താഴെയുള്ള ബട്ടൺ അമർത്തി റിക്വസ്റ്റ് കൊടുക്കുന്ന നിമിഷം ബോട്ട് ഫയലുകൾ അയച്ചു തരും.*",
                 reply_markup=reply_markup,
                 parse_mode="Markdown"
             )
             return
 
+        # യൂസർ ചാനലിൽ ഉണ്ടെങ്കിൽ നേരിട്ട് ഫയലുകൾ നൽകുന്നു
         batch_data = batch_collection.find_one({'batch_id': batch_id})
         if batch_data:
             from_chat = batch_data['from_chat']
             start_id = batch_data['start_id']
             end_id = batch_data['end_id']
             
-            await update.message.reply_text(
-                "✨ **താങ്കൾ തിരഞ്ഞ ഫയലുകൾ താഴെ നൽകുന്നു!**\n\n"
-                "📢 കൂടുതൽ ഫയലുകൾക്കായി ഞങ്ങളോടൊപ്പം തുടരുക! 👇"
-            )
-            
+            await update.message.reply_text("✨ **താങ്കൾ തിരഞ്ഞ ഫയലുകൾ താഴെ നൽകുന്നു!** 👇")
             for msg_id in range(start_id, end_id + 1):
                 try:
                     await context.bot.copy_message(
@@ -100,7 +134,8 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             await update.message.reply_text("❌ തെറ്റായ ലിങ്ക് അല്ലെങ്കിൽ ഈ ബാച്ച് നിലവിലില്ല!")
     else:
-        await update.message.reply_text("ഹലോ! ഞാൻ ഒരു അഡ്വാൻസ്ഡ് Force Join ഫീച്ചറുള്ള Batch File Share Bot ആണ്. 📂")
+        await update.message.reply_text("ഹലോ! ഞാൻ ഒരു അഡ്വാന്‍സ്ഡ് ജോയിൻ റിക്വസ്റ്റ് ഫീച്ചറുള്ള ഫയൽ ഷെയറിങ് ബോട്ട് ആണ്. 📂")
+
 
 
 # /setchannel കമാൻഡ് (തിരുത്തിയ ഭാഗം 🛠️)
