@@ -43,10 +43,18 @@ def main():
     
     app.add_handler(ChatJoinRequestHandler(handlers.handle_join_request))
     
-    forward_filters = filters.FORWARDED & (filters.Document.ALL | filters.PHOTO | filters.VIDEO | filters.AUDIO)
+    # 📝 സ്റ്റിക്കറുകളും ടെക്സ്റ്റുകളും കൂടി ഫോർവേഡ് ഫിൽട്ടറിലേക്ക് ഇവിടെ ആഡ് ചെയ്തിരിക്കുന്നു
+    forward_filters = filters.FORWARDED & (
+        filters.Document.ALL | 
+        filters.PHOTO | 
+        filters.VIDEO | 
+        filters.AUDIO | 
+        filters.Sticker.ALL |          # സ്റ്റിക്കറുകൾക്കായി
+        (filters.TEXT & ~filters.COMMAND) # കമാൻഡുകൾ അല്ലാത്ത സാധാരണ ടെക്സ്റ്റുകൾക്കായി
+    )
     app.add_handler(MessageHandler(forward_filters, handlers.handle_forwarded_files))
 
-    # 🛡️ ആന്റി-സ്പാം ഫീച്ചർ ബോട്ടിലേക്ക് ഇവിടെ കണക്ട് ചെയ്യുന്നു
+    # 🛡️ ആന്റി-സ്പാം ഫೀച്ചർ ബോട്ടിലേക്ക് ഇവിടെ കണക്ട് ചെയ്യുന്നു
     # ശ്രദ്ധിക്കുക: മറ്റ് ഫയൽ ഫോർവേഡുകൾ തടസ്സപ്പെടാതിരിക്കാൻ ഇത് കമാൻഡുകൾക്ക് താഴെയാണ് നൽകിയിരിക്കുന്നത്
     register_antispam(app)
 
@@ -55,3 +63,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
