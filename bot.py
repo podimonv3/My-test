@@ -1,10 +1,13 @@
 import logging
 import threading
 from flask import Flask
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ChatJoinRequestHandler, CallbackQueryHandler # 👈 'CallbackQueryHandler' കൂടി ഇവിടെ ചേർക്കുക
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ChatJoinRequestHandler, CallbackQueryHandler 
 # info.py ഫയലിൽ നിന്നും BOT_TOKEN കൃത്യമായി ഇമ്പോർട്ട് ചെയ്യുന്നു
 from info import BOT_TOKEN
 import handlers
+
+# 🚨 പുതിയ ആന്റി-സ്പാം ഫയൽ ഇവിടെ ഇമ്പോർട്ട് ചെയ്യുന്നു
+from antispam import register_antispam
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
@@ -42,6 +45,10 @@ def main():
     
     forward_filters = filters.FORWARDED & (filters.Document.ALL | filters.PHOTO | filters.VIDEO | filters.AUDIO)
     app.add_handler(MessageHandler(forward_filters, handlers.handle_forwarded_files))
+
+    # 🛡️ ആന്റി-സ്പാം ഫീച്ചർ ബോട്ടിലേക്ക് ഇവിടെ കണക്ട് ചെയ്യുന്നു
+    # ശ്രദ്ധിക്കുക: മറ്റ് ഫയൽ ഫോർവേഡുകൾ തടസ്സപ്പെടാതിരിക്കാൻ ഇത് കമാൻഡുകൾക്ക് താഴെയാണ് നൽകിയിരിക്കുന്നത്
+    register_antispam(app)
 
     print("ബോട്ട് വിജയകരമായി റൺ ആകുന്നു...")
     app.run_polling()
