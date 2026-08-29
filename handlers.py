@@ -47,9 +47,11 @@ async def handle_join_request(update: Update, context: ContextTypes.DEFAULT_TYPE
                 end_id = batch_data['end_id']
                 
                 try:
+                    # 🚨 ക്രാഷ് ഒഴിവാക്കാൻ ബോൾഡ് ടെക്സ്റ്റ് HTML രീതിയിലേക്ക് മാറ്റിയിരിക്കുന്നു
                     await context.bot.send_message(
                         chat_id=user_id,
-                        text="✨ **നിങ്ങളുടെ ജോയിൻ റിക്വസ്റ്റ് ലഭിച്ചിരിക്കുന്നു! നിങ്ങൾ തിരഞ്ഞ ഫയലുകൾ താഴെ നൽകുന്നു:** 👇"
+                        text="✨ <b>നിങ്ങളുടെ ജോയിൻ റിക്വസ്റ്റ് ലഭിച്ചിരിക്കുന്നു! നിങ്ങൾ തിരഞ്ഞ ഫയലുകൾ താഴെ നൽകുന്നു:</b> 👇",
+                        parse_mode="HTML"
                     )
                     for msg_id in range(start_id, end_id + 1):
                         await context.bot.copy_message(
@@ -65,6 +67,7 @@ async def handle_join_request(update: Update, context: ContextTypes.DEFAULT_TYPE
                     )
                 except:
                     pass
+
 
 # /start കമാൻഡ് - ഒരു വട്ടം റിക്വസ്റ്റ് അയച്ചാൽ പിന്നീട് ചോദിക്കില്ല 🛡️
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -118,22 +121,23 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             keyboard = [[InlineKeyboardButton("📩 Request to Join Channel", url=invite_link)]]
             reply_markup = InlineKeyboardMarkup(keyboard)
             
+            # 🚨 ക്രാഷ് ഒഴിവാക്കാൻ Markdown മാറ്റി HTML ആക്കിയിരിക്കുന്നു
             await update.message.reply_text(
-                "⚠️ **ഫയലുകൾ ലഭിക്കുന്നതിനായി താഴെ കാണുന്ന ചാനലിലേക്ക് Join Request അയക്കുക!**\n\n"
-                "👇 *താഴെയുള്ള ബട്ടൺ അമർത്തി റിക്വസ്റ്റ് കൊടുക്കുന്ന നിമിഷം ബോട്ട് ഫയലുകൾ അയച്ചു തരും.*",
+                "⚠️ <b>ഫയലുകൾ ലഭിക്കുന്നതിനായി താഴെ കാണുന്ന ചാനലിലേക്ക് Join Request അയക്കുക!</b>\n\n"
+                "👇 <i>താഴെയുള്ള ബട്ടൺ അമർത്തി റിക്വസ്റ്റ് കൊടുക്കുന്ന നിമിഷം ബോട്ട് ഫയലുകൾ അയച്ചു തരും.</i>",
                 reply_markup=reply_markup,
-                parse_mode="Markdown"
+                parse_mode="HTML"
             )
             return
 
-        # മെമ്പർ ആണെങ്കിലോ, അല്ലെങ്കിൽ നേരത്തെ റിക്വസ്റ്റ് അയച്ചിട്ടുണ്ടെങ്കിലോ നേരിട്ട് ഫയലുകൾ നൽകുന്നു 🚀
+        # നേരിട്ട് ഫയലുകൾ നൽകുന്നു (ഇത് ടെക്സ്റ്റ്, സ്റ്റിക്കർ ഉൾപ്പെടെ എല്ലാം സപ്പോർട്ട് ചെയ്യും) 🚀
         batch_data = batch_collection.find_one({'batch_id': batch_id})
         if batch_data:
             from_chat = batch_data['from_chat']
             start_id = batch_data['start_id']
             end_id = batch_data['end_id']
             
-            await update.message.reply_text("✨ **താങ്കൾ തിരഞ്ഞ ഫയലുകൾ താഴെ നൽകുന്നു!** 👇")
+            await update.message.reply_text("✨ <b>താങ്കൾ തിരഞ്ഞ ഫയലുകൾ താഴെ നൽകുന്നു!</b> 👇", parse_mode="HTML")
             for msg_id in range(start_id, end_id + 1):
                 try:
                     await context.bot.copy_message(
@@ -151,14 +155,15 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 
-# /setchannel കമാൻഡ് (തിരുത്തിയ ഭാഗം 🛠️)
+# /setchannel കമാൻഡ് (HTML രീതിയിലേക്ക് തിരുത്തിയത് 🛠️)
 async def set_channel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     if user_id != OWNER_ID:
         return
 
     if not context.args:
-        await update.message.reply_text("⚠️ **രീതി:** `/setchannel [ചാനൽ_ഐഡി]`", parse_mode="Markdown")
+        # 🚨 ക്രാഷ് ഒഴിവാക്കാൻ HTML ആക്കി മാറ്റിയിരിക്കുന്നു
+        await update.message.reply_text("⚠️ <b>രീതി:</b> <code>/setchannel [ചാനൽ_ഐഡി]</code>", parse_mode="HTML")
         return
 
     try:
@@ -167,29 +172,31 @@ async def set_channel_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         try:
             await context.bot.get_chat(new_channel_id)
         except TelegramError:
-            await update.message.reply_text("❌ ബോട്ടിന് ഈ ചാനലിൽ പ്രവേശനമില്ല! ആദ്യം ബോട്ടിനെ ആ ചാനലിൽ **Admin** ആക്കുക.")
+            # 🚨 ഇവിടെയും ബോൾഡ് ടെക്സ്റ്റ് HTML രീതിയിലാക്കി
+            await update.message.reply_text("❌ ബോട്ടിന് ഈ ചാനലിൽ പ്രവേശനമില്ല! ആദ്യം ബോട്ടിനെ ആ ചാനലിൽ <b>Admin</b> ആക്കുക.", parse_mode="HTML")
             return
 
         settings_collection.update_one({'_id': 'fsub_config'}, {'$set': {'channel_id': new_channel_id}}, upsert=True)
         requests_collection.delete_many({}) 
         
+        # 🚨 സുരക്ഷിതമായ HTML ഫോർമാറ്റിംഗ്
         await update.message.reply_text(
-            f"✅ **റിക്വസ്റ്റ് ചാനൽ മാറ്റിയിരിക്കുന്നു!**\n🆔 ID: `{new_channel_id}`\n\n"
-            f"🧹 _ഡാറ്റാബേസിലെ പഴയ ജോയിൻ റിക്വസ്റ്റുകൾ എല്ലാം വിജയകരമായി ക്ലിയർ ചെയ്തിട്ടുണ്ട്._", 
-            parse_mode="Markdown"
+            f"✅ <b>റിക്വസ്റ്റ് ചാനൽ മാറ്റിയിരിക്കുന്നു!</b>\n🆔 ID: <code>{new_channel_id}</code>\n\n"
+            f"🧹 <i>ഡാറ്റാബേസിലെ പഴയ ജോയിൻ റിക്വസ്റ്റുകൾ എല്ലാം വിജയകരമായി ക്ലിയർ ചെയ്തിട്ടുണ്ട്.</i>", 
+            parse_mode="HTML"
         )
     except (ValueError, IndexError):
         await update.message.reply_text("❌ തെറ്റായ ഐഡി ഫോർമാറ്റ്!")
 
 
-# /broadcast കമാൻഡ്
+# /broadcast കമാൻഡ് (HTML രീതിയിലേക്ക് തിരുത്തിയത് 📢)
 async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     if user_id != OWNER_ID:
         return
 
     if not update.message.reply_to_message:
-        await update.message.reply_text("⚠️ **ഉപയോഗിക്കേണ്ട രീതി:** ഏതെങ്കിലും ഒരു മെസ്സേജിന് മറുപടിയായി (Reply) `/broadcast` എന്ന് ടൈപ്പ് ചെയ്യുക.")
+        await update.message.reply_text("⚠️ <b>ഉപയോഗിക്കേണ്ട രീതി:</b> ഏതെങ്കിലും ഒരു മെസ്സേജിന് മറുപടിയായി (Reply) <code>/broadcast</code> എന്ന് ടൈപ്പ് ചെയ്യുക.", parse_mode="HTML")
         return
 
     broadcast_msg = update.message.reply_to_message
@@ -213,34 +220,39 @@ async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             failed += 1
             continue
 
+    # 🚨 ഫൈനൽ മെസ്സേജും HTML രീതിയിലാക്കി
     await update.message.reply_text(
-        f"✅ **ബ്രോഡ്കാസ്റ്റിംഗ് പൂർത്തിയായി!**\n\n👤 വിജയം: {success}\n❌ പരാജയം (Blocked Users): {failed}"
+        f"✅ <b>ബ്രോഡ്കാസ്റ്റിംഗ് പൂർത്തിയായി!</b>\n\n👤 വിജയം: {success}\n❌ പരാജയം (Blocked Users): {failed}",
+        parse_mode="HTML"
     )
 
-# ഫയലുകൾ ഫോർവേഡ് ചെയ്യുന്നത് നിയന്ത്രിക്കാൻ
+
+# ഫയലുകൾ ഫോർവേഡ് ചെയ്യുന്നത് നിയന്ത്രിക്കാൻ (HTML രീതിയിലേക്ക് മാറ്റി, പ്രൈവസി ലോക്ക് മറികടന്നത് 🛠️)
 async def handle_forwarded_files(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     if user_id != OWNER_ID:
         return
 
     if not update.message.forward_date:
-        await update.message.reply_text("⚠️ ദയവായി ഒരു ചാനലിൽ നിന്നും ഫയൽ **Forward** ചെയ്ത് അയക്കുക!")
+        await update.message.reply_text("⚠️ ദയവായി ഒരു ചാനലിൽ നിന്നും ഫയൽ <b>Forward</b> ചെയ്ത് അയക്കുക!", parse_mode="HTML")
         return
         
+    # ഫോർവേഡ് ചെയ്ത ചാനൽ ഐഡിയും മെസ്സേജ് ഐഡിയും എടുക്കുന്നു
     chat_id = update.message.forward_from_chat.id if update.message.forward_from_chat else None
     msg_id = update.message.forward_from_message_id if update.message.forward_from_message_id else None
     
+    # 💡 പ്രൈവസി സെറ്റിംഗ്സ് ലോക്ക് ഉള്ള അക്കൗണ്ടുകളിൽ നിന്നോ ടെക്സ്റ്റുകളിൽ നിന്നോ ആണെങ്കിൽ ബോട്ടിലെ മെസ്സേജ് ഡാറ്റ എടുക്കുന്നു
     if not chat_id or not msg_id:
-        await update.message.reply_text("❌ ഈ ഫയലിൽ നിന്നും ചാനൽ ഡാറ്റ എടുക്കാൻ കഴിഞ്ഞില്ല. ചാനൽ പബ്ലിക് ആണെന്ന് ഉറപ്പാക്കുക.")
-        return
+        chat_id = update.message.chat_id
+        msg_id = update.message.message_id
 
     if user_id not in user_data_store:
         user_data_store[user_id] = {'chat_id': chat_id, 'start_msg_id': msg_id}
-        await update.message.reply_text("📥 **ആദ്യത്തെ ഫയൽ സ്വീകരിച്ചിരിക്കുന്നു!**\n\nഇനി അവസാന ഫയൽ ഫോർവേഡ് ചെയ്യൂ...")
+        await update.message.reply_text("📥 <b>ആദ്യത്തെ ഫയൽ സ്വീകരിച്ചിരിക്കുന്നു!</b>\n\nഇനി അവസാന ഫയൽ ഫോർവേഡ് ചെയ്യൂ...", parse_mode="HTML")
     else:
         first_file_data = user_data_store[user_id]
         if first_file_data['chat_id'] != chat_id:
-            await update.message.reply_text("❌ രണ്ട് ഫയലുകളും ഒരേ ചാനലിൽ നിന്നായിരിക്കണം!")
+            await update.message.reply_text("❌ രണ്ട് ഫയലുകളും ഒരേ ചാനലിൽ നിന്നായിരിക്കണം!", parse_mode="HTML")
             del user_data_store[user_id]
             return
             
@@ -259,12 +271,13 @@ async def handle_forwarded_files(update: Update, context: ContextTypes.DEFAULT_T
         bot_info = await context.bot.get_me()
         batch_link = f"https://t.me/{bot_info.username}?start={batch_id}"
         
-        await update.message.reply_text(f"✅ **Batch നിർമ്മിച്ചിരിക്കുന്നു!**\n🔗 **Batch ലിങ്ക്:** {batch_link}", parse_mode="HTML")
+        # ✅ ലിങ്കിൽ പ്രത്യേക ചിഹ്നങ്ങൾ വന്നാലും ക്രാഷ് ആകാത്ത HTML ഫോർമാറ്റ്
+        await update.message.reply_text(f"✅ <b>Batch നിർമ്മിച്ചിരിക്കുന്നു!</b>\n🔗 <b>Batch ലിങ്ക്:</b> {batch_link}", parse_mode="HTML")
         del user_data_store[user_id]
 
 
 
-# 📊 സ്റ്റാറ്റിസ്റ്റിക്സ് വിവരങ്ങൾ ശേഖരിക്കുന്ന ഫങ്ക്ഷൻ (ക്രാഷ് പ്രൊട്ടക്ഷൻ ഉൾപ്പെടുത്തിയത് 🛡️)
+# 📊 സ്റ്റാറ്റിസ്റ്റിക്സ് വിവരങ്ങൾ ശേഖരിക്കുന്ന ഫങ്ക്ഷൻ (ക്രാഷ് പ്രൊട്ടക്ഷൻ ഒപ്പം HTML ഫോർമാറ്റിംഗും 🛡️)
 async def generate_stats_text() -> str:
     total_users = users_collection.count_documents({})
     total_batches = batch_collection.count_documents({})
@@ -295,28 +308,30 @@ async def generate_stats_text() -> str:
     koyeb_remaining_ram = max(0.0, koyeb_ram_limit - bot_ram_used_mb)
     koyeb_used_percentage = round((bot_ram_used_mb / koyeb_ram_limit) * 100, 2)
 
-    channel_text = f"`{current_channel}`" if current_channel else "സെറ്റ് ചെയ്തിട്ടില്ല ❌"
+    channel_text = f"<code>{current_channel}</code>" if current_channel else "സെറ്റ് ചെയ്തിട്ടില്ല ❌"
 
+    # 🚨 മാർക്ക്ഡൗൺ മാറ്റി പൂർണ്ണമായും HTML കോഡിലേക്ക് മാറ്റി എഴുതിയത്
     text = (
-        f"📊 **ബോട്ട് സ്റ്റാറ്റിസ്റ്റിക്സ് (Bot Stats)**\n\n"
-        f"👤 **ആകെ ഉപയോക്താക്കൾ:** {total_users}\n"
-        f"📦 **ആകെ ബാച്ച് ലിങ്കുകൾ:** {total_batches}\n"
-        f"📩 **നിലവിലുള്ള ജോയിൻ റിക്വസ്റ്റുകൾ:** {total_requests}\n\n"
+        f"📊 <b>ബോട്ട് സ്റ്റാറ്റിസ്റ്റിക്സ് (Bot Stats)</b>\n\n"
+        f"👤 <b>ആകെ ഉപയോക്താക്കൾ:</b> {total_users}\n"
+        f"📦 <b>ആകെ ബാച്ച് ലിങ്കുകൾ:</b> {total_batches}\n"
+        f"📩 <b>നിലവിലുള്ള ജോയിൻ റിക്വസ്റ്റുകൾ:</b> {total_requests}\n\n"
         
-        f"💾 **ഡാറ്റാബേസ് വിവരങ്ങൾ (MongoDB):**\n"
-        f" └ 📉 ഉപയോഗിച്ചത്: `{used_db_space} MB` ({db_used_percentage}%)\n"
-        f" └ 📈 ബാക്കിയുള്ളത്: `{remaining_db_space} MB` / `512 MB`\n\n"
+        f"💾 <b>ഡാറ്റാബേസ് വിവരങ്ങൾ (MongoDB):</b>\n"
+        f" └ 📉 ഉപയോഗിച്ചത്: <code>{used_db_space} MB</code> ({db_used_percentage}%)\n"
+        f" └ 📈 ബാക്കിയുള്ളത്: <code>{remaining_db_space} MB</code> / <code>512 MB</code>\n\n"
         
-        f"🚀 **ഹോസ്റ്റിംഗ് വിവരങ്ങൾ (Koyeb):**\n"
-        f" └ 🆔 ഇൻസ്റ്റൻസ് തരം: `{koyeb_instance_type.upper()}`\n"
-        f" └ 📉 ബോട്ട് ഉപയോഗിക്കുന്ന റാം: `{bot_ram_used_mb} MB` ({koyeb_used_percentage}%)\n"
-        f" └ 📈 ഹോസ്റ്റിംഗിൽ ബാക്കിയുള്ള റാം: `{koyeb_remaining_ram} MB` / `{koyeb_ram_limit} MB`\n\n"
+        f"🚀 <b>ഹോസ്റ്റിംഗ് വിവരങ്ങൾ (Koyeb):</b>\n"
+        f" └ 🆔 ഇൻസ്റ്റൻസ് തരം: <code>{koyeb_instance_type.upper()}</code>\n"
+        f" └ 📉 ബോട്ട് ഉപയോഗിക്കുന്ന റാം: <code>{bot_ram_used_mb} MB</code> ({koyeb_used_percentage}%)\n"
+        f" └ 📈 ഹോസ്റ്റിംഗിൽ ബാക്കിയുള്ള റാം: <code>{koyeb_remaining_ram} MB</code> / <code>{koyeb_ram_limit} MB</code>\n\n"
         
-        f"📢 **നിലവിലെ റിക്വസ്റ്റ് ചാനൽ ഐഡി:** {channel_text}"
+        f"📢 <b>നിലവിലെ റിക്വസ്റ്റ് ചാനൽ ഐഡി:</b> {channel_text}"
     )
     return text
 
-# /stats കമാൻഡ് വഴി ആദ്യം മെസ്സേജ് അയക്കുന്നു
+
+# /stats കമാൻഡ് വഴി ആദ്യം മെസ്സേജ് അയക്കുന്നു (HTML രീതിയിലേക്ക് മാറ്റി 📊)
 async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     if user_id != OWNER_ID:
@@ -326,9 +341,11 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     stats_text = await generate_stats_text()
-    await update.message.reply_text(stats_text, reply_markup=reply_markup, parse_mode="Markdown")
+    # 🚨 ക്രാഷ് ഒഴിവാക്കാൻ parse_mode="HTML" ആക്കിയിരിക്കുന്നു
+    await update.message.reply_text(stats_text, reply_markup=reply_markup, parse_mode="HTML")
 
-# ബട്ടൻ അമർത്തുമ്പോൾ മെസ്സേജ് എഡിറ്റ് ചെയ്യുന്ന ഫങ്ക്ഷൻ
+
+# ബട്ടൻ അമർത്തുമ്പോൾ മെസ്സേജ് എഡിറ്റ് ചെയ്യുന്ന ഫങ്ക്ഷൻ (HTML രീതിയിലേക്ക് മാറ്റി 🔄)
 async def stats_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     user_id = query.from_user.id
@@ -344,7 +361,9 @@ async def stats_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     try:
-        await query.edit_message_text(text=updated_text, reply_markup=reply_markup, parse_mode="Markdown")
+        # 🚨 ഇവിടെയും എഡിറ്റ് ചെയ്യുമ്പോൾ സുരക്ഷിതമായ parse_mode="HTML" ഉപയോഗിക്കുന്നു
+        await query.edit_message_text(text=updated_text, reply_markup=reply_markup, parse_mode="HTML")
     except TelegramError:
         pass
+
 
