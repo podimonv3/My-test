@@ -259,7 +259,7 @@ async def handle_forwarded_files(update: Update, context: ContextTypes.DEFAULT_T
         bot_info = await context.bot.get_me()
         batch_link = f"https://t.me/{bot_info.username}?start={batch_id}"
         
-        await update.message.reply_text(f"✅ **Batch നിർമ്മിച്ചിരിക്കുന്നു!**\n🔗 **Batch ലിങ്ക്:** {batch_link}", parse_mode="Markdown")
+        await update.message.reply_text(f"✅ **Batch നിർമ്മിച്ചിരിക്കുന്നു!**\n🔗 **Batch ലിങ്ക്:** {batch_link}", parse_mode="HTML")
         del user_data_store[user_id]
 
 
